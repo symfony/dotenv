@@ -127,6 +127,9 @@ final class Dotenv
         }
     }
 
+    /**
+     * @return string
+     */
     private function lexVarname()
     {
         // var name + optional export
@@ -155,6 +158,9 @@ final class Dotenv
         return $matches[2];
     }
 
+    /**
+     * @return string
+     */
     private function lexValue()
     {
         if (preg_match('/[ \t]*+(?:#.*)?$/Am', $this->data, $matches, null, $this->cursor)) {
@@ -243,6 +249,9 @@ final class Dotenv
         }
     }
 
+    /**
+     * @param string $value
+     */
     private function resolveCommands($value)
     {
         if (false === strpos($value, '$')) {
@@ -285,6 +294,9 @@ final class Dotenv
         }, $value);
     }
 
+    /**
+     * @param string $value
+     */
     private function resolveVariables($value)
     {
         if (false === strpos($value, '$')) {
@@ -323,12 +335,18 @@ final class Dotenv
         return str_replace('\\$', '$', $value);
     }
 
+    /**
+     * @param string $text
+     */
     private function moveCursor($text)
     {
         $this->cursor += strlen($text);
         $this->lineno += substr_count($text, "\n");
     }
 
+    /**
+     * @param string $message
+     */
     private function createFormatException($message)
     {
         return new FormatException($message, new FormatExceptionContext($this->data, $this->path, $this->lineno, $this->cursor));
