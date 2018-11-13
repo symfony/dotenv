@@ -219,7 +219,7 @@ final class Dotenv
         return $matches[2];
     }
 
-    private function lexValue()
+    private function lexValue(): string
     {
         if (preg_match('/[ \t]*+(?:#.*)?$/Am', $this->data, $matches, 0, $this->cursor)) {
             $this->moveCursor($matches[0]);
@@ -315,7 +315,7 @@ final class Dotenv
         return $v;
     }
 
-    private function lexNestedExpression()
+    private function lexNestedExpression(): string
     {
         ++$this->cursor;
         $value = '';
@@ -341,7 +341,7 @@ final class Dotenv
         return $value;
     }
 
-    private function skipEmptyLines()
+    private function skipEmptyLines(): void
     {
         if (preg_match('/(?:\s*+(?:#[^\n]*+)?+)++/A', $this->data, $match, 0, $this->cursor)) {
             $this->moveCursor($match[0]);
@@ -436,13 +436,13 @@ final class Dotenv
         return str_replace('\\$', '$', $value);
     }
 
-    private function moveCursor($text)
+    private function moveCursor(string $text): void
     {
         $this->cursor += \strlen($text);
         $this->lineno += substr_count($text, "\n");
     }
 
-    private function createFormatException($message)
+    private function createFormatException($message): FormatException
     {
         return new FormatException($message, new FormatExceptionContext($this->data, $this->path, $this->lineno, $this->cursor));
     }
