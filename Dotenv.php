@@ -100,7 +100,7 @@ final class Dotenv
         }
 
         if (file_exists($p = "$path.$env.local")) {
-            $this->load($p);
+            $this->overload($p);
         }
     }
 
