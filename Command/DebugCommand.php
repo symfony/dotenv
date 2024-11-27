@@ -50,7 +50,17 @@ final class DebugCommand extends Command
             return 1;
         }
 
-        $filePath = $this->projectDirectory.\DIRECTORY_SEPARATOR.'.env';
+        $dotenvPath = $this->projectDirectory;
+
+        if (is_file($composerFile = $this->projectDirectory.'/composer.json')) {
+            $runtimeConfig = (json_decode(file_get_contents($composerFile), true))['extra']['runtime'] ?? [];
+
+            if (isset($runtimeConfig['dotenv_path'])) {
+                $dotenvPath = $this->projectDirectory.'/'.$runtimeConfig['dotenv_path'];
+            }
+        }
+
+        $filePath = $dotenvPath.'/.env';
         $envFiles = $this->getEnvFiles($filePath);
         $availableFiles = array_filter($envFiles, 'is_file');
 
