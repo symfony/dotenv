@@ -288,7 +288,11 @@ OUTPUT;
 
         $command = new DebugCommand($env, $projectDirectory);
         $application = new Application();
-        $application->add($command);
+        if (method_exists($application, 'addCommand')) {
+            $application->addCommand($command);
+        } else {
+            $application->add($command);
+        }
         $tester = new CommandCompletionTester($application->get('debug:dotenv'));
         $this->assertSame(['FOO', 'TEST'], $tester->complete(['']));
     }
