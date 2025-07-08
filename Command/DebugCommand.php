@@ -81,7 +81,7 @@ EOT
             $dotenvPath = $this->projectDirectory;
 
             if (is_file($composerFile = $this->projectDirectory.'/composer.json')) {
-                $runtimeConfig = (json_decode(file_get_contents($composerFile), true))['extra']['runtime'] ?? [];
+                $runtimeConfig = json_decode(file_get_contents($composerFile), true)['extra']['runtime'] ?? [];
 
                 if (isset($runtimeConfig['dotenv_path'])) {
                     $dotenvPath = $this->projectDirectory.'/'.$runtimeConfig['dotenv_path'];
