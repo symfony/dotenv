@@ -11,6 +11,7 @@
 
 namespace Symfony\Component\Dotenv\Tests\Command;
 
+use PHPUnit\Framework\Attributes\RunInSeparateProcess;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Console\Application;
 use Symfony\Component\Console\Helper\FormatterHelper;
@@ -22,9 +23,7 @@ use Symfony\Component\Dotenv\Dotenv;
 
 class DebugCommandTest extends TestCase
 {
-    /**
-     * @runInSeparateProcess
-     */
+    #[RunInSeparateProcess]
     public function testErrorOnUninitializedDotenv()
     {
         unset($_SERVER['SYMFONY_DOTENV_VARS']);
@@ -38,9 +37,7 @@ class DebugCommandTest extends TestCase
         $this->assertStringContainsString('[ERROR] Dotenv component is not initialized', $output);
     }
 
-    /**
-     * @runInSeparateProcess
-     */
+    #[RunInSeparateProcess]
     public function testEmptyDotEnvVarsList()
     {
         $_SERVER['SYMFONY_DOTENV_VARS'] = '';
@@ -275,9 +272,7 @@ OUTPUT;
         $this->assertStringContainsString('TEST       1234    1234             1234        0000', $output);
     }
 
-    /**
-     * @runInSeparateProcess
-     */
+    #[RunInSeparateProcess]
     public function testCompletion()
     {
         $env = 'prod';
