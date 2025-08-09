@@ -54,15 +54,15 @@ final class DebugCommand extends Command
                 new InputArgument('filter', InputArgument::OPTIONAL, 'The name of an environment variable or a filter.', null, $this->getAvailableVars(...)),
             ])
             ->setHelp(<<<'EOT'
-The <info>%command.full_name%</info> command displays all the environment variables configured by dotenv:
+                The <info>%command.full_name%</info> command displays all the environment variables configured by dotenv:
 
-  <info>php %command.full_name%</info>
+                  <info>php %command.full_name%</info>
 
-To get specific variables, specify its full or partial name:
+                To get specific variables, specify its full or partial name:
 
-    <info>php %command.full_name% FOO_BAR</info>
+                    <info>php %command.full_name% FOO_BAR</info>
 
-EOT
+                EOT
             );
     }
 

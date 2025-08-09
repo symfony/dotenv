@@ -47,17 +47,17 @@ class DebugCommandTest extends TestCase
         $tester = new CommandTester($command);
         $tester->execute([]);
         $expectedFormat = <<<'OUTPUT'
-%a
- ---------- ------- ------------ ------%S
-  Variable   Value   .env.local   .env%S
- ---------- ------- ------------ ------%S
-  FOO                baz          bar%S
-  TEST123            n/a          true%S
- ---------- ------- ------------ ------%S
+            %a
+             ---------- ------- ------------ ------%S
+              Variable   Value   .env.local   .env%S
+             ---------- ------- ------------ ------%S
+              FOO                baz          bar%S
+              TEST123            n/a          true%S
+             ---------- ------- ------------ ------%S
 
- // Note that values might be different between web and CLI.%S
-%a
-OUTPUT;
+             // Note that values might be different between web and CLI.%S
+            %a
+            OUTPUT;
 
         $this->assertStringMatchesFormat($expectedFormat, $tester->getDisplay());
     }
