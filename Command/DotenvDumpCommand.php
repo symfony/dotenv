@@ -23,7 +23,13 @@ use Symfony\Component\Dotenv\Dotenv;
 /**
  * A console command to compile .env files into a PHP-optimized file called .env.local.php.
  *
- * @internal
+ * To use this command, first register it explicitly as a service, e.g in your services.yaml file:
+ *
+ *     ```yaml
+ *     services:
+ *         # [...]
+ *         Symfony\Component\Dotenv\Command\DotenvDumpCommand: ~
+ *     ```
  */
 #[Autoconfigure(bind: ['$projectDir' => '%kernel.project_dir%', '$defaultEnv' => '%kernel.environment%'])]
 #[AsCommand(name: 'dotenv:dump', description: 'Compile .env files to .env.local.php')]
