@@ -209,7 +209,7 @@ final class DebugCommand extends Command
     {
         $projectDir = is_file($this->projectDir) ? \dirname($this->projectDir) : $this->projectDir;
 
-        if (str_starts_with($filePath, $projectDir.'/')) {
+        if (str_starts_with($filePath, $projectDir.'/') || str_starts_with($filePath, $projectDir.\DIRECTORY_SEPARATOR)) {
             return substr($filePath, \strlen($projectDir) + 1);
         }
 
