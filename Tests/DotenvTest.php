@@ -52,7 +52,7 @@ class DotenvTest extends TestCase
             ['FOO=$(echo foo'."\n", "Missing closing parenthesis. in \".env\" at line 1.\n...FOO=$(echo foo\\n...\n                ^ line 1 offset 14"],
             ["FOO=\nBAR=\${FOO:-\'a{a}a}", "Unsupported character \"'\" found in the default value of variable \"\$FOO\". in \".env\" at line 2.\n...\\nBAR=\${FOO:-\'a{a}a}...\n                       ^ line 2 offset 24"],
             ["FOO=\nBAR=\${FOO:-a\$a}", "Unsupported character \"\$\" found in the default value of variable \"\$FOO\". in \".env\" at line 2.\n...FOO=\\nBAR=\${FOO:-a\$a}...\n                       ^ line 2 offset 20"],
-            ["FOO=\nBAR=\${FOO:-a\"a}", "Unclosed braces on variable expansion in \".env\" at line 2.\n...FOO=\\nBAR=\${FOO:-a\"a}...\n                    ^ line 2 offset 17"],
+            ["FOO=\nBAR=\${FOO:-a\"a}", "Missing quote to end the value in \".env\" at line 2.\n...FOO=\\nBAR=\${FOO:-a\"a}...\n                       ^ line 2 offset 20"],
             ['_=FOO', "Invalid character in variable name in \".env\" at line 1.\n..._=FOO...\n  ^ line 1 offset 0"],
         ];
 
@@ -411,6 +411,24 @@ class DotenvTest extends TestCase
 
         $this->assertSame('$BAR', getenv('FOO'));
         $this->assertSame('world', getenv('BAR'));
+
+        // escaped $ in double-quoted value must stay literal during deferred resolution
+        file_put_contents($path, 'FOO="\$2y\$10\$AAAAAAAAAAAAAAAAAAAAAAAAAA.BBBBBBBBBBBBBBBBBBBBBB"');
+        file_put_contents("$path.local", 'BAR=dummy');
+
+        $resetContext();
+        (new Dotenv())->usePutenv()->loadEnv($path, 'TEST_APP_ENV');
+
+        $this->assertSame('$2y$10$AAAAAAAAAAAAAAAAAAAAAAAAAA.BBBBBBBBBBBBBBBBBBBBBB', getenv('FOO'));
+
+        // escaped $ in unquoted value must stay literal during deferred resolution
+        file_put_contents($path, 'FOO=\$2y\$10\$AAAAAAAAAAAAAAAAAAAAAAAAAA.BBBBBBBBBBBBBBBBBBBBBB');
+        file_put_contents("$path.local", 'BAR=dummy');
+
+        $resetContext();
+        (new Dotenv())->usePutenv()->loadEnv($path, 'TEST_APP_ENV');
+
+        $this->assertSame('$2y$10$AAAAAAAAAAAAAAAAAAAAAAAAAA.BBBBBBBBBBBBBBBBBBBBBB', getenv('FOO'));
 
         $resetContext();
         unlink("$path.local");
