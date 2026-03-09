@@ -366,8 +366,8 @@ class DotenvTest extends TestCase
     public function testLoadEnvResolvesVariablesFromOverriddenFiles()
     {
         $resetContext = static function (): void {
-            unset($_ENV['SYMFONY_DOTENV_VARS'], $_ENV['REDIS_HOST'], $_ENV['LOCK_DSN'], $_ENV['HOST'], $_ENV['DSN'], $_ENV['FOO'], $_ENV['BAR'], $_ENV['TEST_APP_ENV']);
-            unset($_SERVER['SYMFONY_DOTENV_VARS'], $_SERVER['REDIS_HOST'], $_SERVER['LOCK_DSN'], $_SERVER['HOST'], $_SERVER['DSN'], $_SERVER['FOO'], $_SERVER['BAR'], $_SERVER['TEST_APP_ENV']);
+            unset($_ENV['SYMFONY_DOTENV_VARS'], $_ENV['REDIS_HOST'], $_ENV['LOCK_DSN'], $_ENV['HOST'], $_ENV['DSN'], $_ENV['FOO'], $_ENV['BAR'], $_ENV['DATABASE_URL'], $_ENV['TEST_APP_ENV']);
+            unset($_SERVER['SYMFONY_DOTENV_VARS'], $_SERVER['REDIS_HOST'], $_SERVER['LOCK_DSN'], $_SERVER['HOST'], $_SERVER['DSN'], $_SERVER['FOO'], $_SERVER['BAR'], $_SERVER['DATABASE_URL'], $_SERVER['TEST_APP_ENV']);
             putenv('SYMFONY_DOTENV_VARS');
             putenv('REDIS_HOST');
             putenv('LOCK_DSN');
@@ -375,6 +375,7 @@ class DotenvTest extends TestCase
             putenv('DSN');
             putenv('FOO');
             putenv('BAR');
+            putenv('DATABASE_URL');
             putenv('TEST_APP_ENV');
         };
 
@@ -429,6 +430,24 @@ class DotenvTest extends TestCase
         (new Dotenv())->usePutenv()->loadEnv($path, 'TEST_APP_ENV');
 
         $this->assertSame('$2y$10$AAAAAAAAAAAAAAAAAAAAAAAAAA.BBBBBBBBBBBBBBBBBBBBBB', getenv('FOO'));
+
+        // double backslash in unquoted value without $ must be unescaped during deferred resolution
+        file_put_contents($path, 'DATABASE_URL=sqlsrv://user:pass@localhost\\\\SQLEXPRESS/db');
+        file_put_contents("$path.local", 'BAR=dummy');
+
+        $resetContext();
+        (new Dotenv())->usePutenv()->loadEnv($path, 'TEST_APP_ENV');
+
+        $this->assertSame('sqlsrv://user:pass@localhost\\SQLEXPRESS/db', getenv('DATABASE_URL'));
+
+        // double backslash + variable in cross-file resolution must not double-unescape
+        file_put_contents($path, "HOST=localhost\nDSN=\"path\\\\\\\\:\${HOST}\"");
+        file_put_contents("$path.local", 'HOST=override');
+
+        $resetContext();
+        (new Dotenv())->usePutenv()->loadEnv($path, 'TEST_APP_ENV');
+
+        $this->assertSame('path\\\\:override', getenv('DSN'));
 
         $resetContext();
         unlink("$path.local");

@@ -666,7 +666,6 @@ final class Dotenv
                 }
                 $resolvedValue = $this->resolveCommands($value, $loadedVars);
                 $resolvedValue = $this->resolveVariables($resolvedValue, $loadedVars);
-                $resolvedValue = str_replace('\\\\', '\\', $resolvedValue);
                 if ($value !== $resolvedValue) {
                     $resolved[$name] = $resolvedValue;
                 }
@@ -680,11 +679,15 @@ final class Dotenv
             throw new class('Too many levels of variable indirection in env vars: '.implode(', ', array_keys($resolved)).'.') extends \LogicException implements ExceptionInterface {};
         }
 
-        // Restore literal $ signs protected from resolution
+        // Restore literal $ signs and unescape backslashes
         $restored = [];
         foreach ($loadedVars as $name => $_) {
-            if ('SYMFONY_DOTENV_VARS' !== $name && str_contains($value = $_ENV[$name] ?? '', "\x00")) {
-                $restored[$name] = str_replace("\x00", '$', $value);
+            if ('SYMFONY_DOTENV_VARS' === $name) {
+                continue;
+            }
+            $value = $_ENV[$name] ?? '';
+            if ($value !== $newValue = str_replace(["\x00", '\\\\'], ['$', '\\'], $value)) {
+                $restored[$name] = $newValue;
             }
         }
         if ($restored) {
