@@ -51,7 +51,7 @@ class DotenvTest extends TestCase
             ['FOO=$(echo foo'."\n", "Missing closing parenthesis. in \".env\" at line 1.\n...FOO=$(echo foo\\n...\n                ^ line 1 offset 14"],
             ["FOO=\nBAR=\${FOO:-\'a{a}a}", "Unsupported character \"'\" found in the default value of variable \"\$FOO\". in \".env\" at line 2.\n...\\nBAR=\${FOO:-\'a{a}a}...\n                       ^ line 2 offset 24"],
             ["FOO=\nBAR=\${FOO:-a\$a}", "Unsupported character \"\$\" found in the default value of variable \"\$FOO\". in \".env\" at line 2.\n...FOO=\\nBAR=\${FOO:-a\$a}...\n                       ^ line 2 offset 20"],
-            ["FOO=\nBAR=\${FOO:-a\"a}", "Unclosed braces on variable expansion in \".env\" at line 2.\n...FOO=\\nBAR=\${FOO:-a\"a}...\n                    ^ line 2 offset 17"],
+            ["FOO=\nBAR=\${FOO:-a\"a}", "Missing quote to end the value in \".env\" at line 2.\n...FOO=\\nBAR=\${FOO:-a\"a}...\n                       ^ line 2 offset 20"],
             ['_=FOO', "Invalid character in variable name in \".env\" at line 1.\n..._=FOO...\n  ^ line 1 offset 0"],
         ];
 
@@ -363,8 +363,8 @@ class DotenvTest extends TestCase
     public function testLoadEnvResolvesVariablesFromOverriddenFiles()
     {
         $resetContext = static function (): void {
-            unset($_ENV['SYMFONY_DOTENV_VARS'], $_ENV['REDIS_HOST'], $_ENV['LOCK_DSN'], $_ENV['HOST'], $_ENV['DSN'], $_ENV['FOO'], $_ENV['BAR'], $_ENV['TEST_APP_ENV']);
-            unset($_SERVER['SYMFONY_DOTENV_VARS'], $_SERVER['REDIS_HOST'], $_SERVER['LOCK_DSN'], $_SERVER['HOST'], $_SERVER['DSN'], $_SERVER['FOO'], $_SERVER['BAR'], $_SERVER['TEST_APP_ENV']);
+            unset($_ENV['SYMFONY_DOTENV_VARS'], $_ENV['REDIS_HOST'], $_ENV['LOCK_DSN'], $_ENV['HOST'], $_ENV['DSN'], $_ENV['FOO'], $_ENV['BAR'], $_ENV['DATABASE_URL'], $_ENV['TEST_APP_ENV']);
+            unset($_SERVER['SYMFONY_DOTENV_VARS'], $_SERVER['REDIS_HOST'], $_SERVER['LOCK_DSN'], $_SERVER['HOST'], $_SERVER['DSN'], $_SERVER['FOO'], $_SERVER['BAR'], $_SERVER['DATABASE_URL'], $_SERVER['TEST_APP_ENV']);
             putenv('SYMFONY_DOTENV_VARS');
             putenv('REDIS_HOST');
             putenv('LOCK_DSN');
@@ -372,6 +372,7 @@ class DotenvTest extends TestCase
             putenv('DSN');
             putenv('FOO');
             putenv('BAR');
+            putenv('DATABASE_URL');
             putenv('TEST_APP_ENV');
         };
 
@@ -408,6 +409,42 @@ class DotenvTest extends TestCase
 
         $this->assertSame('$BAR', getenv('FOO'));
         $this->assertSame('world', getenv('BAR'));
+
+        // escaped $ in double-quoted value must stay literal during deferred resolution
+        file_put_contents($path, 'FOO="\$2y\$10\$AAAAAAAAAAAAAAAAAAAAAAAAAA.BBBBBBBBBBBBBBBBBBBBBB"');
+        file_put_contents("$path.local", 'BAR=dummy');
+
+        $resetContext();
+        (new Dotenv())->usePutenv()->loadEnv($path, 'TEST_APP_ENV');
+
+        $this->assertSame('$2y$10$AAAAAAAAAAAAAAAAAAAAAAAAAA.BBBBBBBBBBBBBBBBBBBBBB', getenv('FOO'));
+
+        // escaped $ in unquoted value must stay literal during deferred resolution
+        file_put_contents($path, 'FOO=\$2y\$10\$AAAAAAAAAAAAAAAAAAAAAAAAAA.BBBBBBBBBBBBBBBBBBBBBB');
+        file_put_contents("$path.local", 'BAR=dummy');
+
+        $resetContext();
+        (new Dotenv())->usePutenv()->loadEnv($path, 'TEST_APP_ENV');
+
+        $this->assertSame('$2y$10$AAAAAAAAAAAAAAAAAAAAAAAAAA.BBBBBBBBBBBBBBBBBBBBBB', getenv('FOO'));
+
+        // double backslash in unquoted value without $ must be unescaped during deferred resolution
+        file_put_contents($path, 'DATABASE_URL=sqlsrv://user:pass@localhost\\\\SQLEXPRESS/db');
+        file_put_contents("$path.local", 'BAR=dummy');
+
+        $resetContext();
+        (new Dotenv())->usePutenv()->loadEnv($path, 'TEST_APP_ENV');
+
+        $this->assertSame('sqlsrv://user:pass@localhost\\SQLEXPRESS/db', getenv('DATABASE_URL'));
+
+        // double backslash + variable in cross-file resolution must not double-unescape
+        file_put_contents($path, "HOST=localhost\nDSN=\"path\\\\\\\\:\${HOST}\"");
+        file_put_contents("$path.local", 'HOST=override');
+
+        $resetContext();
+        (new Dotenv())->usePutenv()->loadEnv($path, 'TEST_APP_ENV');
+
+        $this->assertSame('path\\\\:override', getenv('DSN'));
 
         $resetContext();
         unlink("$path.local");
