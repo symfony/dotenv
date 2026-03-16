@@ -545,6 +545,90 @@ class DotenvTest extends TestCase
         rmdir($tmpdir);
     }
 
+    public function testLoadEnvSelfReferencingVariableWithDefault()
+    {
+        $resetContext = static function (): void {
+            unset($_ENV['SYMFONY_DOTENV_VARS'], $_ENV['MY_VAR'], $_ENV['TEST_APP_ENV']);
+            unset($_SERVER['SYMFONY_DOTENV_VARS'], $_SERVER['MY_VAR'], $_SERVER['TEST_APP_ENV']);
+            putenv('SYMFONY_DOTENV_VARS');
+            putenv('MY_VAR');
+            putenv('TEST_APP_ENV');
+        };
+
+        @mkdir($tmpdir = sys_get_temp_dir().'/dotenv');
+        $path = tempnam($tmpdir, 'sf-');
+
+        // Self-referencing variable with default value
+        file_put_contents($path, 'MY_VAR="${MY_VAR:-default_value}"');
+
+        $resetContext();
+        (new Dotenv())->usePutenv()->loadEnv($path, 'TEST_APP_ENV');
+
+        $this->assertSame('default_value', getenv('MY_VAR'));
+
+        // When host env is set, it should take precedence
+        $resetContext();
+        putenv('MY_VAR=host_value');
+        $_ENV['MY_VAR'] = 'host_value';
+        (new Dotenv())->usePutenv()->loadEnv($path, 'TEST_APP_ENV');
+
+        $this->assertSame('host_value', getenv('MY_VAR'));
+
+        // Self-referencing variable with := (assign default)
+        file_put_contents($path, 'MY_VAR="${MY_VAR:=fallback}"');
+
+        $resetContext();
+        (new Dotenv())->usePutenv()->loadEnv($path, 'TEST_APP_ENV');
+
+        $this->assertSame('fallback', getenv('MY_VAR'));
+
+        $resetContext();
+        putenv('MY_VAR');
+        unlink($path);
+        @rmdir($tmpdir);
+    }
+
+    public function testLoadEnvSelfReferencingEnvKeyControlsFileLoading()
+    {
+        $resetContext = static function (): void {
+            unset($_ENV['SYMFONY_DOTENV_VARS'], $_ENV['TEST_APP_ENV'], $_ENV['FOO']);
+            unset($_SERVER['SYMFONY_DOTENV_VARS'], $_SERVER['TEST_APP_ENV'], $_SERVER['FOO']);
+            putenv('SYMFONY_DOTENV_VARS');
+            putenv('TEST_APP_ENV');
+            putenv('FOO');
+        };
+
+        @mkdir($tmpdir = sys_get_temp_dir().'/dotenv');
+        $path = tempnam($tmpdir, 'sf-');
+
+        // APP_ENV with self-referencing default must control which .env files are loaded
+        file_put_contents($path, 'TEST_APP_ENV="${TEST_APP_ENV:-dev}"'."\nFOO=bar");
+        file_put_contents("$path.dev", 'FOO=devbar');
+
+        $resetContext();
+        (new Dotenv())->usePutenv()->loadEnv($path, 'TEST_APP_ENV');
+
+        $this->assertSame('dev', getenv('TEST_APP_ENV'));
+        $this->assertSame('devbar', getenv('FOO'));
+
+        // Host env should override the default and control file loading
+        $resetContext();
+        file_put_contents("$path.prod", 'FOO=prodbar');
+        putenv('TEST_APP_ENV=prod');
+        $_ENV['TEST_APP_ENV'] = 'prod';
+        (new Dotenv())->usePutenv()->loadEnv($path, 'TEST_APP_ENV');
+
+        $this->assertSame('prod', getenv('TEST_APP_ENV'));
+        $this->assertSame('prodbar', getenv('FOO'));
+
+        $resetContext();
+        putenv('TEST_APP_ENV');
+        @unlink("$path.dev");
+        @unlink("$path.prod");
+        unlink($path);
+        @rmdir($tmpdir);
+    }
+
     public function testLoadEnvThrowsOnCircularVariableReferences()
     {
         $resetContext = static function (): void {

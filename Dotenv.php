@@ -113,11 +113,16 @@ final class Dotenv
 
             if (null === $env = $_SERVER[$k] ?? $_ENV[$k] ?? null) {
                 $this->populate([$k => $env = $defaultEnv], $overrideExistingVars);
+            } elseif (str_contains($env, '$') || str_contains($env, "\x00") || str_contains($env, '\\')) {
+                $env = $this->resolveEnvKey($env, $k);
             }
 
             if (!\in_array($env, $testEnvs, true) && is_file($p = "$path.local")) {
                 $this->doLoad($overrideExistingVars, [$p]);
                 $env = $_SERVER[$k] ?? $_ENV[$k] ?? $env;
+                if (str_contains($env, '$') || str_contains($env, "\x00") || str_contains($env, '\\')) {
+                    $env = $this->resolveEnvKey($env, $k);
+                }
             }
 
             if ('local' === $env) {
@@ -643,6 +648,50 @@ final class Dotenv
         }
     }
 
+    /**
+     * Eagerly resolves a raw env key value so that loadEnv() can determine
+     * which additional .env files to load before full deferred resolution.
+     */
+    private function resolveEnvKey(string $value, string $name): string
+    {
+        $loadedVars = array_flip(explode(',', $_SERVER['SYMFONY_DOTENV_VARS'] ?? $_ENV['SYMFONY_DOTENV_VARS'] ?? ''));
+        unset($loadedVars['']);
+
+        // Save and clear own value so self-referencing defaults work
+        $envBackup = $_ENV[$name] ?? null;
+        $serverBackup = $_SERVER[$name] ?? null;
+        unset($_ENV[$name], $_SERVER[$name]);
+        if ($this->usePutenv) {
+            $getenvBackup = (string) getenv($name);
+            putenv($name);
+        }
+
+        $this->values = [];
+        $this->path = '';
+        $this->data = '';
+        $this->lineno = 0;
+        $this->cursor = 0;
+        $this->end = 0;
+
+        $resolved = $this->resolveCommands($value, $loadedVars);
+        $resolved = $this->resolveVariables($resolved, $loadedVars);
+        $resolved = str_replace(["\x00", '\\\\'], ['$', '\\'], $resolved);
+
+        if (null !== $envBackup) {
+            $_ENV[$name] = $envBackup;
+        }
+        if (null !== $serverBackup) {
+            $_SERVER[$name] = $serverBackup;
+        }
+        if ($this->usePutenv) {
+            putenv("$name=$getenvBackup");
+        }
+
+        $this->values = [];
+
+        return $resolved;
+    }
+
     private function resolveLoadedVars(): void
     {
         $loadedVars = array_flip(explode(',', $_SERVER['SYMFONY_DOTENV_VARS'] ?? $_ENV['SYMFONY_DOTENV_VARS'] ?? ''));
@@ -655,6 +704,20 @@ final class Dotenv
         $this->cursor = 0;
         $this->end = 0;
 
+        // Detect variables that were originally defined as self-referencing
+        // (e.g. MY_VAR="${MY_VAR:-default}") so their own raw value is hidden
+        // during resolution, allowing the default to trigger correctly.
+        $selfReferencingVars = [];
+        foreach ($loadedVars as $name => $_) {
+            if ('SYMFONY_DOTENV_VARS' === $name) {
+                continue;
+            }
+            $value = $_ENV[$name] ?? '';
+            if (str_contains($value, '$') && preg_match('/\$\{?'.preg_quote($name, '/').'(?![A-Za-z0-9_])/', $value)) {
+                $selfReferencingVars[$name] = true;
+            }
+        }
+
         for ($pass = 0; $pass < 5; ++$pass) {
             $resolved = [];
             foreach ($loadedVars as $name => $_) {
@@ -664,8 +727,32 @@ final class Dotenv
                 if (!str_contains($value = $_ENV[$name] ?? '', '$')) {
                     continue;
                 }
+
+                if (isset($selfReferencingVars[$name])) {
+                    $envBackup = $_ENV[$name] ?? null;
+                    $serverBackup = $_SERVER[$name] ?? null;
+                    unset($_ENV[$name], $_SERVER[$name]);
+                    if ($this->usePutenv) {
+                        $getenvBackup = $this->usePutenv ? (string) getenv($name) : null;
+                        putenv($name);
+                    }
+                }
+
                 $resolvedValue = $this->resolveCommands($value, $loadedVars);
                 $resolvedValue = $this->resolveVariables($resolvedValue, $loadedVars);
+
+                if (isset($selfReferencingVars[$name])) {
+                    if (null !== $envBackup) {
+                        $_ENV[$name] = $envBackup;
+                    }
+                    if (null !== $serverBackup) {
+                        $_SERVER[$name] = $serverBackup;
+                    }
+                    if ($this->usePutenv) {
+                        putenv("$name=$getenvBackup");
+                    }
+                }
+
                 if ($value !== $resolvedValue) {
                     $resolved[$name] = $resolvedValue;
                 }
