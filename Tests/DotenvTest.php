@@ -15,6 +15,7 @@ use PHPUnit\Framework\TestCase;
 use Symfony\Component\Dotenv\Dotenv;
 use Symfony\Component\Dotenv\Exception\FormatException;
 use Symfony\Component\Dotenv\Exception\PathException;
+use Symfony\Component\Dotenv\Exception\VariableCircularReferenceException;
 
 class DotenvTest extends TestCase
 {
@@ -646,7 +647,7 @@ class DotenvTest extends TestCase
 
         $resetContext();
         try {
-            $this->expectException(\LogicException::class);
+            $this->expectException(VariableCircularReferenceException::class);
             $this->expectExceptionMessage('Too many levels of variable indirection');
             (new Dotenv())->load($path1, $path2);
         } finally {
