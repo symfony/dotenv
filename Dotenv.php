@@ -11,10 +11,10 @@
 
 namespace Symfony\Component\Dotenv;
 
-use Symfony\Component\Dotenv\Exception\ExceptionInterface;
 use Symfony\Component\Dotenv\Exception\FormatException;
 use Symfony\Component\Dotenv\Exception\FormatExceptionContext;
 use Symfony\Component\Dotenv\Exception\PathException;
+use Symfony\Component\Dotenv\Exception\VariableCircularReferenceException;
 use Symfony\Component\Process\Exception\ExceptionInterface as ProcessException;
 use Symfony\Component\Process\Process;
 
@@ -762,7 +762,7 @@ final class Dotenv
             $this->populate($resolved, true);
         }
         if (5 === $pass && $resolved) {
-            throw new class('Too many levels of variable indirection in env vars: '.implode(', ', array_keys($resolved)).'.') extends \LogicException implements ExceptionInterface {};
+            throw new VariableCircularReferenceException('Too many levels of variable indirection in env vars: '.implode(', ', array_keys($resolved)).'.');
         }
 
         // Restore literal $ signs and unescape backslashes
