@@ -589,6 +589,60 @@ class DotenvTest extends TestCase
         @rmdir($tmpdir);
     }
 
+    public function testLoadSelfReferencingVariableWithSuffix()
+    {
+        $resetContext = static function (): void {
+            unset($_ENV['SYMFONY_DOTENV_VARS'], $_ENV['MY_VAR']);
+            unset($_SERVER['SYMFONY_DOTENV_VARS'], $_SERVER['MY_VAR']);
+            putenv('SYMFONY_DOTENV_VARS');
+            putenv('MY_VAR');
+        };
+
+        @mkdir($tmpdir = sys_get_temp_dir().'/dotenv');
+        $basePath = tempnam($tmpdir, 'sf-');
+        $overridePath = tempnam($tmpdir, 'sf-');
+
+        // Base file sets original value, override file appends suffix
+        file_put_contents($basePath, 'MY_VAR=original');
+        file_put_contents($overridePath, 'MY_VAR="${MY_VAR}_suffix"');
+
+        $resetContext();
+        $dotenv = (new Dotenv())->usePutenv();
+        $dotenv->load($basePath);
+        $dotenv->load($overridePath);
+
+        $this->assertSame('original_suffix', getenv('MY_VAR'));
+
+        // Test with prefix instead of suffix
+        file_put_contents($overridePath, 'MY_VAR="prefix_${MY_VAR}"');
+
+        $resetContext();
+        $dotenv = (new Dotenv())->usePutenv();
+        $dotenv->load($basePath);
+        $dotenv->load($overridePath);
+
+        $this->assertSame('prefix_original', getenv('MY_VAR'));
+
+        // Test chained loads (three files)
+        $thirdPath = tempnam($tmpdir, 'sf-');
+        file_put_contents($overridePath, 'MY_VAR="${MY_VAR}_middle"');
+        file_put_contents($thirdPath, 'MY_VAR="${MY_VAR}_end"');
+
+        $resetContext();
+        $dotenv = (new Dotenv())->usePutenv();
+        $dotenv->load($basePath);
+        $dotenv->load($overridePath);
+        $dotenv->load($thirdPath);
+
+        $this->assertSame('original_middle_end', getenv('MY_VAR'));
+
+        $resetContext();
+        unlink($basePath);
+        unlink($overridePath);
+        unlink($thirdPath);
+        @rmdir($tmpdir);
+    }
+
     public function testLoadEnvSelfReferencingEnvKeyControlsFileLoading()
     {
         $resetContext = static function (): void {
