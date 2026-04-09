@@ -36,6 +36,7 @@ final class Dotenv
     private string $data;
     private int $end;
     private array $values = [];
+    private array $overriddenValues = [];
     private array $prodEnvs = ['prod'];
     private bool $usePutenv = false;
 
@@ -643,7 +644,15 @@ final class Dotenv
                 throw new FormatException('Loading files containing NUL bytes is not supported.', new FormatExceptionContext($data, $path, 1, 0));
             }
 
-            $this->populate($this->parseRaw($data, $path), $overrideExistingVars);
+            $values = $this->parseRaw($data, $path);
+
+            foreach ($values as $name => $_) {
+                if (!isset($this->overriddenValues[$name]) && isset($_ENV[$name])) {
+                    $this->overriddenValues[$name] = $_ENV[$name];
+                }
+            }
+
+            $this->populate($values, $overrideExistingVars);
         }
     }
 
@@ -730,10 +739,19 @@ final class Dotenv
                 if (isset($selfReferencingVars[$name])) {
                     $envBackup = $_ENV[$name] ?? null;
                     $serverBackup = $_SERVER[$name] ?? null;
-                    unset($_ENV[$name], $_SERVER[$name]);
+                    if (isset($this->overriddenValues[$name])) {
+                        $_ENV[$name] = $this->overriddenValues[$name];
+                        $_SERVER[$name] = $this->overriddenValues[$name];
+                    } else {
+                        unset($_ENV[$name], $_SERVER[$name]);
+                    }
                     if ($this->usePutenv) {
-                        $getenvBackup = $this->usePutenv ? (string) getenv($name) : null;
-                        putenv($name);
+                        $getenvBackup = (string) getenv($name);
+                        if (isset($this->overriddenValues[$name])) {
+                            putenv("$name={$this->overriddenValues[$name]}");
+                        } else {
+                            putenv($name);
+                        }
                     }
                 }
 
@@ -781,6 +799,7 @@ final class Dotenv
         }
 
         $this->values = [];
+        $this->overriddenValues = [];
         unset($this->path, $this->data, $this->lineno, $this->cursor, $this->end);
     }
 
