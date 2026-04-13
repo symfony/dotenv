@@ -21,14 +21,14 @@ class DotenvDumpCommandTest extends TestCase
     protected function setUp(): void
     {
         file_put_contents(__DIR__.'/.env', <<<EOF
-APP_ENV=dev
-APP_SECRET=abc123
-EOF
+            APP_ENV=dev
+            APP_SECRET=abc123
+            EOF
         );
 
         file_put_contents(__DIR__.'/.env.local', <<<EOF
-APP_LOCAL=yes
-EOF
+            APP_LOCAL=yes
+            EOF
         );
     }
 
@@ -73,8 +73,8 @@ EOF
     public function testExecuteTestEnvs()
     {
         file_put_contents(__DIR__.'/composer.json', <<<EOF
-{"extra":{"runtime":{"test_envs":[]}}}
-EOF
+            {"extra":{"runtime":{"test_envs":[]}}}
+            EOF
         );
 
         $command = $this->createCommand();
