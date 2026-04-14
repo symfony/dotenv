@@ -235,6 +235,41 @@ class DotenvTest extends TestCase
         $this->assertSame('BAZ', $bar);
     }
 
+    public function testLoadDoesNotReResolveAlreadyLoadedVars()
+    {
+        unset($_ENV['FOO'], $_ENV['BAR'], $_ENV['SYMFONY_DOTENV_VARS']);
+        unset($_SERVER['FOO'], $_SERVER['BAR'], $_SERVER['SYMFONY_DOTENV_VARS']);
+        putenv('FOO');
+        putenv('BAR');
+        putenv('SYMFONY_DOTENV_VARS');
+
+        @mkdir($tmpdir = sys_get_temp_dir().'/dotenv');
+
+        $path1 = tempnam($tmpdir, 'sf-');
+        $path2 = tempnam($tmpdir, 'sf-');
+
+        file_put_contents($path1, "FOO='This\$isokay'");
+        file_put_contents($path2, "BAR='hello'");
+
+        try {
+            (new Dotenv())->load($path1);
+            $this->assertSame('This$isokay', $_ENV['FOO']);
+
+            (new Dotenv())->load($path2);
+            $this->assertSame('This$isokay', $_ENV['FOO']);
+            $this->assertSame('hello', $_ENV['BAR']);
+        } finally {
+            unset($_ENV['FOO'], $_ENV['BAR'], $_ENV['SYMFONY_DOTENV_VARS']);
+            unset($_SERVER['FOO'], $_SERVER['BAR'], $_SERVER['SYMFONY_DOTENV_VARS']);
+            putenv('FOO');
+            putenv('BAR');
+            putenv('SYMFONY_DOTENV_VARS');
+            unlink($path1);
+            unlink($path2);
+            rmdir($tmpdir);
+        }
+    }
+
     public function testLoadEnv()
     {
         $resetContext = static function (): void {
