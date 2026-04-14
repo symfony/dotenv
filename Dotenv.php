@@ -37,6 +37,7 @@ final class Dotenv
     private int $end;
     private array $values = [];
     private array $overriddenValues = [];
+    private array $loadedRawVars = [];
     private array $prodEnvs = ['prod'];
     private bool $usePutenv = false;
 
@@ -646,9 +647,15 @@ final class Dotenv
 
             $values = $this->parseRaw($data, $path);
 
+            $loadedVars = array_flip(explode(',', $_SERVER['SYMFONY_DOTENV_VARS'] ?? $_ENV['SYMFONY_DOTENV_VARS'] ?? ''));
+            unset($loadedVars['']);
+
             foreach ($values as $name => $_) {
                 if (!isset($this->overriddenValues[$name]) && isset($_ENV[$name])) {
                     $this->overriddenValues[$name] = $_ENV[$name];
+                }
+                if (isset($loadedVars[$name]) || $overrideExistingVars || !isset($_ENV[$name])) {
+                    $this->loadedRawVars[$name] = true;
                 }
             }
 
@@ -705,6 +712,10 @@ final class Dotenv
         $loadedVars = array_flip(explode(',', $_SERVER['SYMFONY_DOTENV_VARS'] ?? $_ENV['SYMFONY_DOTENV_VARS'] ?? ''));
         unset($loadedVars['']);
 
+        $rawVars = $this->loadedRawVars;
+        $this->loadedRawVars = [];
+        unset($rawVars['SYMFONY_DOTENV_VARS']);
+
         $this->values = [];
         $this->path = '';
         $this->data = '';
@@ -716,10 +727,7 @@ final class Dotenv
         // (e.g. MY_VAR="${MY_VAR:-default}") so their own raw value is hidden
         // during resolution, allowing the default to trigger correctly.
         $selfReferencingVars = [];
-        foreach ($loadedVars as $name => $_) {
-            if ('SYMFONY_DOTENV_VARS' === $name) {
-                continue;
-            }
+        foreach ($rawVars as $name => $_) {
             $value = $_ENV[$name] ?? '';
             if (str_contains($value, '$') && preg_match('/\$\{?'.preg_quote($name, '/').'(?![A-Za-z0-9_])/', $value)) {
                 $selfReferencingVars[$name] = true;
@@ -728,10 +736,7 @@ final class Dotenv
 
         for ($pass = 0; $pass < 5; ++$pass) {
             $resolved = [];
-            foreach ($loadedVars as $name => $_) {
-                if ('SYMFONY_DOTENV_VARS' === $name) {
-                    continue;
-                }
+            foreach ($rawVars as $name => $_) {
                 if (!str_contains($value = $_ENV[$name] ?? '', '$')) {
                     continue;
                 }
@@ -785,10 +790,7 @@ final class Dotenv
 
         // Restore literal $ signs and unescape backslashes
         $restored = [];
-        foreach ($loadedVars as $name => $_) {
-            if ('SYMFONY_DOTENV_VARS' === $name) {
-                continue;
-            }
+        foreach ($rawVars as $name => $_) {
             $value = $_ENV[$name] ?? '';
             if ($value !== $newValue = str_replace(["\x00", '\\\\'], ['$', '\\'], $value)) {
                 $restored[$name] = $newValue;
