@@ -42,6 +42,8 @@ final class Dotenv
     private string $debugKey;
     private array $prodEnvs = ['prod'];
     private bool $usePutenv = false;
+    private bool $deferPutenv = false;
+    private array $pendingPutenv = [];
 
     public function __construct(string $envKey = 'APP_ENV', string $debugKey = 'APP_DEBUG')
     {
@@ -83,8 +85,13 @@ final class Dotenv
      */
     public function load(string $path, string ...$extraPaths): void
     {
-        $this->doLoad(false, \func_get_args());
-        $this->resolveLoadedVars();
+        $this->deferPutenv = true;
+        try {
+            $this->doLoad(false, \func_get_args());
+            $this->resolveLoadedVars();
+        } finally {
+            $this->deferPutenv = false;
+        }
     }
 
     /**
@@ -104,6 +111,7 @@ final class Dotenv
      */
     public function loadEnv(string $path, ?string $envKey = null, string $defaultEnv = 'dev', array $testEnvs = ['test'], bool $overrideExistingVars = false): void
     {
+        $this->deferPutenv = true;
         try {
             $k = $envKey ?? $this->envKey;
 
@@ -139,7 +147,11 @@ final class Dotenv
                 $this->doLoad($overrideExistingVars, [$p]);
             }
         } finally {
-            $this->resolveLoadedVars();
+            try {
+                $this->resolveLoadedVars();
+            } finally {
+                $this->deferPutenv = false;
+            }
         }
     }
 
@@ -180,8 +192,13 @@ final class Dotenv
      */
     public function overload(string $path, string ...$extraPaths): void
     {
-        $this->doLoad(true, \func_get_args());
-        $this->resolveLoadedVars();
+        $this->deferPutenv = true;
+        try {
+            $this->doLoad(true, \func_get_args());
+            $this->resolveLoadedVars();
+        } finally {
+            $this->deferPutenv = false;
+        }
     }
 
     /**
@@ -207,7 +224,11 @@ final class Dotenv
             }
 
             if ($this->usePutenv) {
-                putenv("$name=$value");
+                if ($this->deferPutenv) {
+                    $this->pendingPutenv[$name] = true;
+                } else {
+                    putenv("$name=$value");
+                }
             }
 
             $_ENV[$name] = $value;
@@ -799,6 +820,13 @@ final class Dotenv
         }
         if ($restored) {
             $this->populate($restored, true);
+        }
+
+        if ($this->usePutenv && $this->pendingPutenv) {
+            foreach ($this->pendingPutenv as $name => $_) {
+                putenv($name.'='.($_ENV[$name] ?? ''));
+            }
+            $this->pendingPutenv = [];
         }
 
         $this->values = [];
