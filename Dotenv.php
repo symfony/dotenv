@@ -40,6 +40,8 @@ final class Dotenv
     private array $loadedRawVars = [];
     private array $prodEnvs = ['prod'];
     private bool $usePutenv = false;
+    private bool $deferPutenv = false;
+    private array $pendingPutenv = [];
 
     public function __construct(
         private string $envKey = 'APP_ENV',
@@ -81,8 +83,13 @@ final class Dotenv
      */
     public function load(string $path, string ...$extraPaths): void
     {
-        $this->doLoad(false, \func_get_args());
-        $this->resolveLoadedVars();
+        $this->deferPutenv = true;
+        try {
+            $this->doLoad(false, \func_get_args());
+            $this->resolveLoadedVars();
+        } finally {
+            $this->deferPutenv = false;
+        }
     }
 
     /**
@@ -104,6 +111,7 @@ final class Dotenv
     {
         $this->populatePath($path);
 
+        $this->deferPutenv = true;
         try {
             $k = $envKey ?? $this->envKey;
 
@@ -139,7 +147,11 @@ final class Dotenv
                 $this->doLoad($overrideExistingVars, [$p]);
             }
         } finally {
-            $this->resolveLoadedVars();
+            try {
+                $this->resolveLoadedVars();
+            } finally {
+                $this->deferPutenv = false;
+            }
         }
     }
 
@@ -181,8 +193,13 @@ final class Dotenv
      */
     public function overload(string $path, string ...$extraPaths): void
     {
-        $this->doLoad(true, \func_get_args());
-        $this->resolveLoadedVars();
+        $this->deferPutenv = true;
+        try {
+            $this->doLoad(true, \func_get_args());
+            $this->resolveLoadedVars();
+        } finally {
+            $this->deferPutenv = false;
+        }
     }
 
     /**
@@ -208,7 +225,11 @@ final class Dotenv
             }
 
             if ($this->usePutenv) {
-                putenv("$name=$value");
+                if ($this->deferPutenv) {
+                    $this->pendingPutenv[$name] = true;
+                } else {
+                    putenv("$name=$value");
+                }
             }
 
             $_ENV[$name] = $value;
@@ -800,6 +821,13 @@ final class Dotenv
             $this->populate($restored, true);
         }
 
+        if ($this->usePutenv && $this->pendingPutenv) {
+            foreach ($this->pendingPutenv as $name => $_) {
+                putenv($name.'='.($_ENV[$name] ?? ''));
+            }
+            $this->pendingPutenv = [];
+        }
+
         $this->values = [];
         $this->overriddenValues = [];
         unset($this->path, $this->data, $this->lineno, $this->cursor, $this->end);
@@ -809,7 +837,12 @@ final class Dotenv
     {
         $_ENV['SYMFONY_DOTENV_PATH'] = $_SERVER['SYMFONY_DOTENV_PATH'] = $path;
 
-        if ($this->usePutenv) {
+        if (!$this->usePutenv) {
+            return;
+        }
+        if ($this->deferPutenv) {
+            $this->pendingPutenv['SYMFONY_DOTENV_PATH'] = true;
+        } else {
             putenv('SYMFONY_DOTENV_PATH='.$path);
         }
     }
