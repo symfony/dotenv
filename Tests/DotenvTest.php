@@ -273,6 +273,36 @@ class DotenvTest extends TestCase
         }
     }
 
+    public function testLoadDoesNotResolveExternalEnvVarsOnlyPresentInServer()
+    {
+        // Mimics PHP's default `variables_order = "GPCS"` (no `E`) where
+        // OS-provided environment variables (e.g. from Kubernetes envFrom or
+        // Docker) are placed in $_SERVER but not in $_ENV when PHP starts.
+        // Such values must be left untouched by Dotenv even when the same key
+        // has a default value in the loaded .env file.
+        unset($_ENV['FOO'], $_SERVER['FOO'], $_ENV['SYMFONY_DOTENV_VARS'], $_SERVER['SYMFONY_DOTENV_VARS']);
+        putenv('FOO');
+        putenv('SYMFONY_DOTENV_VARS');
+
+        $_SERVER['FOO'] = 'abc$def';
+
+        @mkdir($tmpdir = sys_get_temp_dir().'/dotenv');
+        $path = tempnam($tmpdir, 'sf-');
+        file_put_contents($path, "FOO=default\n");
+
+        try {
+            (new Dotenv())->loadEnv($path, defaultEnv: 'prod');
+            $this->assertSame('abc$def', $_ENV['FOO']);
+            $this->assertSame('abc$def', $_SERVER['FOO']);
+        } finally {
+            unset($_ENV['FOO'], $_SERVER['FOO'], $_ENV['SYMFONY_DOTENV_VARS'], $_SERVER['SYMFONY_DOTENV_VARS']);
+            putenv('FOO');
+            putenv('SYMFONY_DOTENV_VARS');
+            unlink($path);
+            @rmdir($tmpdir);
+        }
+    }
+
     public function testLoadEnv()
     {
         $resetContext = static function (): void {
