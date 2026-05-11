@@ -672,10 +672,11 @@ final class Dotenv
             unset($loadedVars['']);
 
             foreach ($values as $name => $_) {
-                if (!isset($this->overriddenValues[$name]) && isset($_ENV[$name])) {
-                    $this->overriddenValues[$name] = $_ENV[$name];
+                $alreadyExternal = isset($_ENV[$name]) || isset($_SERVER[$name]) && !str_starts_with($name, 'HTTP_');
+                if (!isset($this->overriddenValues[$name]) && $alreadyExternal) {
+                    $this->overriddenValues[$name] = $_ENV[$name] ?? $_SERVER[$name];
                 }
-                if (isset($loadedVars[$name]) || $overrideExistingVars || !isset($_ENV[$name])) {
+                if (isset($loadedVars[$name]) || $overrideExistingVars || !$alreadyExternal) {
                     $this->loadedRawVars[$name] = true;
                 }
             }
