@@ -272,11 +272,6 @@ class DotenvTest extends TestCase
 
     public function testLoadDoesNotResolveExternalEnvVarsOnlyPresentInServer()
     {
-        // Mimics PHP's default `variables_order = "GPCS"` (no `E`) where
-        // OS-provided environment variables (e.g. from Kubernetes envFrom or
-        // Docker) are placed in $_SERVER but not in $_ENV when PHP starts.
-        // Such values must be left untouched by Dotenv even when the same key
-        // has a default value in the loaded .env file.
         unset($_ENV['FOO'], $_SERVER['FOO'], $_ENV['SYMFONY_DOTENV_VARS'], $_SERVER['SYMFONY_DOTENV_VARS']);
         putenv('FOO');
         putenv('SYMFONY_DOTENV_VARS');
@@ -296,6 +291,107 @@ class DotenvTest extends TestCase
             putenv('FOO');
             putenv('SYMFONY_DOTENV_VARS');
             unlink($path);
+            @rmdir($tmpdir);
+        }
+    }
+
+    public function testLoadDoesNotTruncateExternalEnvVarReferencedFromDotenv()
+    {
+        foreach ([['env' => true, 'server' => true], ['env' => false, 'server' => true]] as $where) {
+            unset($_ENV['EXT_VAR'], $_SERVER['EXT_VAR'], $_ENV['INDIRECT'], $_SERVER['INDIRECT'], $_ENV['SYMFONY_DOTENV_VARS'], $_SERVER['SYMFONY_DOTENV_VARS']);
+            putenv('EXT_VAR');
+            putenv('INDIRECT');
+            putenv('SYMFONY_DOTENV_VARS');
+
+            if ($where['env']) {
+                $_ENV['EXT_VAR'] = 'secret$word';
+            }
+            if ($where['server']) {
+                $_SERVER['EXT_VAR'] = 'secret$word';
+            }
+
+            @mkdir($tmpdir = sys_get_temp_dir().'/dotenv');
+            $path = tempnam($tmpdir, 'sf-');
+            file_put_contents($path, "INDIRECT=\${EXT_VAR}\n");
+
+            try {
+                (new Dotenv())->load($path);
+                $this->assertSame('secret$word', $_ENV['INDIRECT']);
+                $this->assertSame('secret$word', $_SERVER['INDIRECT']);
+            } finally {
+                unset($_ENV['EXT_VAR'], $_SERVER['EXT_VAR'], $_ENV['INDIRECT'], $_SERVER['INDIRECT'], $_ENV['SYMFONY_DOTENV_VARS'], $_SERVER['SYMFONY_DOTENV_VARS']);
+                putenv('EXT_VAR');
+                putenv('INDIRECT');
+                putenv('SYMFONY_DOTENV_VARS');
+                unlink($path);
+                @rmdir($tmpdir);
+            }
+        }
+    }
+
+    public function testOverloadDoesNotExecuteShellSyntaxFromExternalEnvOnSelfReference()
+    {
+        unset($_ENV['FOO'], $_SERVER['FOO'], $_ENV['SYMFONY_DOTENV_VARS'], $_SERVER['SYMFONY_DOTENV_VARS']);
+        putenv('FOO');
+        putenv('SYMFONY_DOTENV_VARS');
+
+        $_ENV['FOO'] = $_SERVER['FOO'] = 'value$(id)';
+
+        @mkdir($tmpdir = sys_get_temp_dir().'/dotenv');
+        $path = tempnam($tmpdir, 'sf-');
+        file_put_contents($path, "FOO=\${FOO:-default}\n");
+
+        try {
+            (new Dotenv())->overload($path);
+            $this->assertSame('value$(id)', $_ENV['FOO']);
+            $this->assertSame('value$(id)', $_SERVER['FOO']);
+        } finally {
+            unset($_ENV['FOO'], $_SERVER['FOO'], $_ENV['SYMFONY_DOTENV_VARS'], $_SERVER['SYMFONY_DOTENV_VARS']);
+            putenv('FOO');
+            putenv('SYMFONY_DOTENV_VARS');
+            unlink($path);
+            @rmdir($tmpdir);
+        }
+    }
+
+    public function testResolveLoadedVarsClearsStateOnCircularReferenceException()
+    {
+        unset($_ENV['A'], $_SERVER['A'], $_ENV['B'], $_SERVER['B'], $_ENV['SYMFONY_DOTENV_VARS'], $_SERVER['SYMFONY_DOTENV_VARS']);
+        putenv('A');
+        putenv('B');
+        putenv('SYMFONY_DOTENV_VARS');
+
+        $_ENV['A'] = $_SERVER['A'] = 'external';
+
+        $dotenv = new Dotenv();
+
+        @mkdir($tmpdir = sys_get_temp_dir().'/dotenv');
+        $circular = tempnam($tmpdir, 'sf-');
+        file_put_contents($circular, "A=\${B}\nB=\${A}x\n");
+        $selfRef = tempnam($tmpdir, 'sf-');
+        file_put_contents($selfRef, "A=\${A:-default}\n");
+
+        try {
+            try {
+                $dotenv->overload($circular);
+                $this->fail('A VariableCircularReferenceException should have been thrown.');
+            } catch (VariableCircularReferenceException) {
+            }
+
+            unset($_ENV['A'], $_SERVER['A'], $_ENV['B'], $_SERVER['B'], $_ENV['SYMFONY_DOTENV_VARS'], $_SERVER['SYMFONY_DOTENV_VARS']);
+            putenv('A');
+            putenv('B');
+            putenv('SYMFONY_DOTENV_VARS');
+
+            $dotenv->load($selfRef);
+            $this->assertSame('default', $_ENV['A']);
+        } finally {
+            unset($_ENV['A'], $_SERVER['A'], $_ENV['B'], $_SERVER['B'], $_ENV['SYMFONY_DOTENV_VARS'], $_SERVER['SYMFONY_DOTENV_VARS']);
+            putenv('A');
+            putenv('B');
+            putenv('SYMFONY_DOTENV_VARS');
+            unlink($circular);
+            unlink($selfRef);
             @rmdir($tmpdir);
         }
     }
