@@ -18,18 +18,23 @@ use Symfony\Component\Dotenv\Command\DotenvDumpCommand;
 
 class DotenvDumpCommandTest extends TestCase
 {
+    private string $projectDir;
+
     protected function setUp(): void
     {
         unset($_SERVER['SYMFONY_DOTENV_PATH']);
         unset($_SERVER['APP_RUNTIME_OPTIONS']);
 
-        file_put_contents(__DIR__.'/.env', <<<EOF
+        $this->projectDir = sys_get_temp_dir().'/sf_dotenv_'.hash('xxh32', __FILE__);
+        @mkdir($this->projectDir);
+
+        file_put_contents($this->projectDir.'/.env', <<<EOF
             APP_ENV=dev
             APP_SECRET=abc123
             EOF
         );
 
-        file_put_contents(__DIR__.'/.env.local', <<<EOF
+        file_put_contents($this->projectDir.'/.env.local', <<<EOF
             APP_LOCAL=yes
             EOF
         );
@@ -37,13 +42,14 @@ class DotenvDumpCommandTest extends TestCase
 
     protected function tearDown(): void
     {
-        @unlink(__DIR__.'/.env');
-        @unlink(__DIR__.'/.env.local');
-        @unlink(__DIR__.'/.env.path');
-        @unlink(__DIR__.'/.env.path.local');
-        @unlink(__DIR__.'/.env.local.php');
-        @unlink(__DIR__.'/.env.path.local.php');
-        @unlink(__DIR__.'/composer.json');
+        @unlink($this->projectDir.'/.env');
+        @unlink($this->projectDir.'/.env.local');
+        @unlink($this->projectDir.'/.env.path');
+        @unlink($this->projectDir.'/.env.path.local');
+        @unlink($this->projectDir.'/.env.local.php');
+        @unlink($this->projectDir.'/.env.path.local.php');
+        @unlink($this->projectDir.'/composer.json');
+        @rmdir($this->projectDir);
 
         unset($_SERVER['SYMFONY_DOTENV_PATH']);
         unset($_SERVER['APP_RUNTIME_OPTIONS']);
@@ -56,9 +62,9 @@ class DotenvDumpCommandTest extends TestCase
             'env' => 'test',
         ]);
 
-        $this->assertFileExists(__DIR__.'/.env.local.php');
+        $this->assertFileExists($this->projectDir.'/.env.local.php');
 
-        $vars = require __DIR__.'/.env.local.php';
+        $vars = require $this->projectDir.'/.env.local.php';
         $this->assertSame([
             'APP_ENV' => 'test',
             'APP_SECRET' => 'abc123',
@@ -73,15 +79,15 @@ class DotenvDumpCommandTest extends TestCase
             '--empty' => true,
         ]);
 
-        $this->assertFileExists(__DIR__.'/.env.local.php');
+        $this->assertFileExists($this->projectDir.'/.env.local.php');
 
-        $vars = require __DIR__.'/.env.local.php';
+        $vars = require $this->projectDir.'/.env.local.php';
         $this->assertSame(['APP_ENV' => 'test'], $vars);
     }
 
     public function testExecuteTestEnvs()
     {
-        file_put_contents(__DIR__.'/composer.json', <<<EOF
+        file_put_contents($this->projectDir.'/composer.json', <<<EOF
             {"extra":{"runtime":{"test_envs":[]}}}
             EOF
         );
@@ -91,9 +97,9 @@ class DotenvDumpCommandTest extends TestCase
             'env' => 'test',
         ]);
 
-        $this->assertFileExists(__DIR__.'/.env.local.php');
+        $this->assertFileExists($this->projectDir.'/.env.local.php');
 
-        $vars = require __DIR__.'/.env.local.php';
+        $vars = require $this->projectDir.'/.env.local.php';
         $this->assertSame([
             'APP_ENV' => 'test',
             'APP_SECRET' => 'abc123',
@@ -103,12 +109,12 @@ class DotenvDumpCommandTest extends TestCase
 
     public function testExecuteWithRuntimeOptionsDotenvPath()
     {
-        file_put_contents(__DIR__.'/.env.path', <<<EOF
+        file_put_contents($this->projectDir.'/.env.path', <<<EOF
             APP_ENV=test
             APP_SECRET=newpath123
             EOF
         );
-        file_put_contents(__DIR__.'/.env.path.local', <<<EOF
+        file_put_contents($this->projectDir.'/.env.path.local', <<<EOF
             LOCAL_PATH=yes
             EOF
         );
@@ -120,9 +126,9 @@ class DotenvDumpCommandTest extends TestCase
             'env' => 'dev',
         ]);
 
-        $this->assertFileExists(__DIR__.'/.env.path.local.php');
+        $this->assertFileExists($this->projectDir.'/.env.path.local.php');
 
-        $vars = require __DIR__.'/.env.path.local.php';
+        $vars = require $this->projectDir.'/.env.path.local.php';
         $this->assertSame([
             'APP_ENV' => 'dev',
             'APP_SECRET' => 'newpath123',
@@ -133,7 +139,7 @@ class DotenvDumpCommandTest extends TestCase
     private function createCommand(): CommandTester
     {
         $application = new Application();
-        $command = new DotenvDumpCommand(__DIR__);
+        $command = new DotenvDumpCommand($this->projectDir);
         if (method_exists($application, 'addCommand')) {
             $application->addCommand($command);
         } else {
